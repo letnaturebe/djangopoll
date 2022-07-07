@@ -128,7 +128,3 @@ class PollTest(TestCase):
         poll = serializer.save(owner=self.user)
         self.assertEqual(poll.questions.count(), 2)
         self.assertEqual(poll.head, data['head'])
-
-
-# Django prefetch_related, select_related 예제(N+1 Problem)
-# 일단 코드 부터.
