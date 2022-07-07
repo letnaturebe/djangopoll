@@ -6,14 +6,10 @@ from django.db import connection
 from django.db.models import QuerySet
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
 from factory.fuzzy import FuzzyDateTime
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.test import APIClient
 
-from poll.models import Poll, PollQuestion, PollVote, User
-from poll.serializers import PollSerializer, PollListSerializer
+from poll.models import Poll, PollQuestion, PollVote, User, Image
+from poll.serializers import PollDetailSerializer, PollSerializer
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -37,11 +33,14 @@ class PollFactory(factory.django.DjangoModelFactory):
 class PollTest(TestCase):
     def setUp(self):
         self.user: User = User.objects.create(**self.create_user())
+        self.user.image = Image.objects.create(image_url='www.image.com')
         self.user.save()
 
         user2 = self.create_user()
         user2['username'] = 'user2'
         self.user2: User = User.objects.create(**user2)
+        self.user2.image = Image.objects.create(image_url='www.image.com')
+        self.user2.save()
 
     def create_user(self) -> dict:
         return {
@@ -58,7 +57,7 @@ class PollTest(TestCase):
         PollVote.objects.create(poll=poll, question=q1, owner=self.user)
         PollVote.objects.create(poll=poll, question=q2, owner=self.user2)
 
-    def test_poll(self):
+    def test_poll_create(self):
         end_time: datetime = datetime.datetime.now() + datetime.timedelta(hours=0, minutes=300, seconds=0)
         poll: Poll = Poll.objects.create(
             head='목요일 회식 가능??',
@@ -73,6 +72,44 @@ class PollTest(TestCase):
 
         self.assertEqual(poll.questions.all().count(), 2)
         self.assertEqual(poll.poll_votes.all().count(), 2)
+
+        serializer = PollDetailSerializer(poll)
+        self.assertEqual(len(serializer.data['questions']), 2)
+        self.assertEqual(len(serializer.data['questions'][0]['question_votes']), 1)
+        self.assertEqual(len(serializer.data['questions'][1]['question_votes']), 1)
+
+    def test_poll_create2(self):
+        for i in range(6):
+            self.create_poll()
+
+        with CaptureQueriesContext(connection) as num_queries:
+            polls: QuerySet[Poll] = Poll.objects.all()
+            serializer = PollDetailSerializer(polls, many=True)
+            self.assertEqual(len(serializer.data), 6)
+
+        print(len(num_queries.captured_queries))
+        print(num_queries.captured_queries)
+
+    def test_poll_n_plus1(self):
+        self.create_poll()
+
+        with CaptureQueriesContext(connection) as expected_num_queries:
+            polls: QuerySet[Poll] = Poll.objects.all()
+            serializer = PollDetailSerializer(polls, many=True)
+            print(serializer.data)
+
+        self.create_poll()
+        self.create_poll()
+        self.create_poll()
+        self.create_poll()
+        self.create_poll()
+
+        with CaptureQueriesContext(connection) as checked_num_queries:
+            polls: QuerySet[Poll] = Poll.objects.all()
+            serializer = PollDetailSerializer(polls, many=True)
+            print(serializer.data)
+
+        self.assertEqual(len(expected_num_queries), len(checked_num_queries))
 
     def test_poll_create_serializer(self):
         end_time: datetime = datetime.datetime.now() + datetime.timedelta(hours=0, minutes=300, seconds=0)
@@ -92,28 +129,6 @@ class PollTest(TestCase):
         self.assertEqual(poll.questions.count(), 2)
         self.assertEqual(poll.head, data['head'])
 
-    def test_poll_queryset(self):
-        from django.test.client import RequestFactory
-        rf = RequestFactory()
-        rf.user = self.user
 
-        self.create_poll()
-
-        with CaptureQueriesContext(connection) as expected_num_queries:
-            polls: QuerySet[Poll] = Poll.objects.all()
-            serializer = PollListSerializer(polls, many=True)
-            print(serializer.data)
-
-        self.create_poll()
-        # self.create_poll()
-        # self.create_poll()
-        # self.create_poll()
-        # self.create_poll()
-        # self.create_poll()
-
-        with CaptureQueriesContext(connection) as checked_num_queries:
-            polls: QuerySet[Poll] = Poll.objects.all()
-            serializer = PollListSerializer(polls, many=True)
-            print(serializer.data)
-
-        self.assertEqual(len(expected_num_queries), len(checked_num_queries))
+# Django prefetch_related, select_related 예제(N+1 Problem)
+# 일단 코드 부터.

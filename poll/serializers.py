@@ -1,13 +1,20 @@
-from django.db.models import QuerySet
 from rest_framework import serializers
 
-from poll.models import Poll, PollQuestion, PollVote, User
+from poll.models import Poll, PollQuestion, PollVote, User, Image
+
+
+class ImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Image
+        fields = '__all__'
 
 
 class UserSerializer(serializers.ModelSerializer):
+    image = ImageSerializer()
+
     class Meta:
         model = User
-        fields = ('id', 'first_name', 'username',)
+        fields = ('id', 'first_name', 'username', 'image',)
 
 
 class PollVoteSerializer(serializers.ModelSerializer):
@@ -26,6 +33,16 @@ class PollQuestionSerializer(serializers.ModelSerializer):
         exclude = ('poll',)
 
 
+class PollDetailSerializer(serializers.ModelSerializer):
+    questions = PollQuestionSerializer(many=True)
+    owner = UserSerializer(read_only=True, )
+
+    class Meta:
+        model = Poll
+        fields = ['id', 'owner', 'head', 'message', 'questions', 'end_time',
+                  'is_anonymous_vote','is_multiple_vote',]
+
+
 class PollSerializer(serializers.ModelSerializer):
     questions = serializers.ListField(child=serializers.CharField(max_length=512, required=True), required=True)
 
@@ -40,34 +57,3 @@ class PollSerializer(serializers.ModelSerializer):
             PollQuestion.objects.create(poll=poll, content=poll_question)
         return poll
 
-
-class PollListSerializer(serializers.ModelSerializer):
-    questions = PollQuestionSerializer(many=True)
-    owner = UserSerializer(read_only=True, )
-    # is_voted = serializers.SerializerMethodField(label='투표했니?', read_only=True)
-
-    class Meta:
-        model = Poll
-        fields = ['id',
-                  'owner',
-                  'head',
-                  'message',
-                  'questions',
-                  'end_time',
-                  'is_anonymous_vote',
-                  'is_multiple_vote',
-                  # 'is_voted',
-                  ]
-
-    # def get_is_voted(self, obj: Poll) -> bool:
-    #     user: User = self.context['request'].user
-    #     if user.is_anonymous:
-    #         return False
-    #
-    #     questions: QuerySet[PollQuestion] = obj.questions.all()
-    #     for question in questions:
-    #         poll_votes: QuerySet[PollVote] = question.question_votes.all()
-    #         for poll_vote in poll_votes:
-    #             if poll_vote.owner.id == user.id:
-    #                 return True
-    #     return False

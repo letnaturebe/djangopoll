@@ -39,15 +39,14 @@ class PollVote(models.Model):
 
 class Poll(models.Model):
     class PollManager(models.Manager):
-        pass
-        # def get_queryset(self) -> QuerySet:
-        #     queryset: QuerySet['Poll'] = super().get_queryset().prefetch_related(
-        #         Prefetch('questions', queryset=PollQuestion.objects.prefetch_related(
-        #             Prefetch('question_votes',
-        #                      queryset=PollVote.objects.select_related('owner__image', 'owner'))
-        #         )),
-        #     ).select_related('owner__image', 'owner')
-        #     return queryset
+        def get_queryset(self) -> QuerySet:
+            queryset: QuerySet['Poll'] = (
+                super().get_queryset()
+                .prefetch_related(
+                    Prefetch('questions', queryset=PollQuestion.objects.prefetch_related(
+                        Prefetch('question_votes', queryset=PollVote.objects.select_related('owner__image')))))
+                .select_related('owner__image'))
+            return queryset
 
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     head = models.CharField(max_length=50)
